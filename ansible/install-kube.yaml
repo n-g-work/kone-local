@@ -1,0 +1,147 @@
+---
+- hosts: all
+  become: true
+
+  vars:
+    kubernetes_allow_pods_on_control_plane: false
+    kubernetes_apiserver_advertise_address: "{{ node_hostname }}"
+    kubernetes_config_cluster_configuration:
+      networking:
+        podSubnet: "{{ kubernetes_pod_network_cidr }}"
+    kubernetes_config_init_configuration:
+      localAPIEndpoint:
+        advertiseAddress: "{{ internal_ip }}"
+
+  roles:
+    - geerlingguy.containerd
+    - geerlingguy.kubernetes
+
+  pre_tasks:
+
+    ### Fix cannot stat /proc/sys/net/bridge/bridge-nf-call-iptables
+    - name: Load kernel modules
+      become: true
+      shell: "{{item}}"
+      with_items:
+        - modprobe overlay
+        - modprobe br_netfilter
+    - name: Persist loading kernel modules
+      become: true
+      blockinfile:
+        path: /etc/modules
+        block: |
+          overlay
+          br_netfilter
+
+    ### Upgrade packages cache and setup user
+    - name: Upgrade all packages
+      package: name=* state=latest
+
+    - name: Add hushlogin
+      file: path=.hushlogin state=touch
+
+    - name: Change shell
+      shell: "chsh -s /bin/bash {{admin_user_name}}"
+
+    - name: Set pretty prompt (ps1)
+      lineinfile:
+        path: .bashrc
+        line: PS1='\[\033[01;32m\]\u\[\033[00m\]@\[\033[01;32m\]\h\[\033[00m\]:\[\033[01;34m\]\w\[\033[01;31m\] \$ \[\033[00m\]'
+
+    ### Setup hosts and hostname
+    - name: Update hosts
+      blockinfile:
+        path: /etc/hosts
+        block: |
+          {{ internal_ip }} kone kone.local
+          {{ internal_ip }} nexus-docker-registry.kone.local
+
+    - name: Set hostname
+      hostname: name="{{ node_hostname }}" use=systemd
+
+    ### Install packages
+    - name: Install common
+      package:
+        name:
+          - apt-transport-https
+          - bash-completion
+          - curl
+          - dnsutils
+          - git
+          - gnupg
+          - haproxy
+          - jq
+          - mc
+          - netcat
+          - net-tools
+          - ntp
+          - openjdk-11-jre-headless
+        state: present
+        update_cache: true
+
+    ### HAPROXY ###
+    - name: Configure haproxy
+      blockinfile:
+        path: /etc/haproxy/haproxy.cfg
+        block: |
+          frontend kubernetes
+              bind :80
+              option tcplog
+              mode tcp
+              default_backend kubernetes-master-node
+
+          backend kubernetes-master-node
+              mode tcp
+              option tcp-check
+              server master {{ internal_ip }}:32080 check
+
+          frontend kubernetes-tls
+              bind :443
+              option tcplog
+              mode tcp
+              default_backend kubernetes-master-node-tls
+
+          backend kubernetes-master-node-tls
+              mode tcp
+              option tcp-check
+              server master {{ internal_ip }}:32443 check
+
+    ### RESTART SERVICES
+    - name: Restart haproxy
+      service: name=haproxy enabled=true state=restarted
+    - name: Restart ntpd
+      service: name=ntp enabled=true state=restarted daemon_reload=true
+
+    ### COPY FILES
+    - name: Copy values yamls and openssl conf
+      copy:
+        src: "{{ item.src }}"
+        dest: "{{ item.dest }}"
+      with_items:
+        - {src: "{{ playbook_dir }}/../ingress_values.yaml" , dest: "/home/{{ admin_user_name }}/ingress_values.yaml"}
+        - {src: "{{ playbook_dir }}/../kone-openssl.conf"   , dest: "/home/{{ admin_user_name }}/kone-openssl.conf"}
+        - {src: "{{ playbook_dir }}/../postgres_values.yaml", dest: "/home/{{ admin_user_name }}/postgres_values.yaml"}
+
+  tasks:
+
+    - name: Untaint control plane node, ignore error
+      shell: kubectl taint node "{{ node_hostname }}" node-role.kubernetes.io/master:NoSchedule- || true
+
+    - name: Create ~/.kube folder
+      file: path="/home/{{ admin_user_name }}/.kube" state=directory
+
+    - name: Copy kubeconfig to admin
+      copy:
+        src: /etc/kubernetes/admin.conf
+        dest: "/home/{{ admin_user_name }}/.kube/config"
+        remote_src: true
+        owner: "{{ admin_user_name }}"
+        group: "{{ admin_user_name }}"
+        mode: '0600'
+
+    - name: Add autocompletion
+      shell: "{{ item }}"
+      with_items:
+        - echo 'source <(kubectl completion bash)' >> "/home/{{ admin_user_name }}/.bashrc"
+        - echo 'alias k=kubectl' >> "/home/{{ admin_user_name }}/.bashrc"
+        - echo 'complete -o default -F __start_kubectl k' >> "/home/{{ admin_user_name }}/.bashrc"

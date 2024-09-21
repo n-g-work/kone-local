@@ -1,0 +1,53 @@
+---
+- hosts: all
+  become: true
+
+  tasks:
+
+    - name: Network fix for Ubuntu
+      when: ansible_distribution == 'Ubuntu'
+      block:
+
+        - name: Remove vagrant and cloud netplan configs
+          file: path={{ item }} state=absent
+          with_items:
+            - /etc/netplan/50-cloud-init.yaml
+            - /etc/netplan/50-vagrant.yaml
+
+        - name: Recreate vagrant netplan config and add disable cloud network config
+          file: path={{ item }} state=touch
+          with_items:
+            - /etc/netplan/50-vagrant.yaml
+            - /etc/cloud/cloud.cfg.d/99-disable-network-config.cfg
+
+        - name: Disable cloud network config
+          lineinfile:
+            path: /etc/cloud/cloud.cfg.d/99-disable-network-config.cfg
+            line: 'network: {config: disabled}'
+
+        - name: Adjust network interfaces
+          blockinfile:
+            path: /etc/netplan/50-vagrant.yaml
+            block: |
+              ---
+              network:
+                version: 2
+                renderer: networkd
+                ethernets:
+                  enp0s3:
+                    addresses:
+                    - {{ internal_ip }}/24
+                    nameservers:
+                      search: [local]
+                  enp0s8:
+                    addresses:
+                    - {{ ansible_host }}/24
+                    nameservers:
+                      search: [local]
+                  enp0s9:
+                    dhcp4: true
+
+        - name: Apply netplan
+          command: sudo netplan apply
+          async: 45
+          poll: 0

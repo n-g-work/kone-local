@@ -1,0 +1,18 @@
+---
+extends: default
+rules:
+  comments-indentation: disable  # don't bother me with this rule
+  # 80 chars should be enough, but don't fail if a line is longer
+  line-length: disable  # some files in roles installed from galaxy don't support the rule
+  truthy:
+    allowed-values:
+      - 'yes'
+      - 'no'
+      - 'True'
+      - 'true'
+      - 'False'
+      - 'false'
+      - 'on'
+      - 'off'
+  commas:
+    max-spaces-before: -1

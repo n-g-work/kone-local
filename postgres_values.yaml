@@ -1,0 +1,30 @@
+# PostgreSQL read only replica parameters
+---
+architecture: standalone
+
+readReplicas:
+  # Number of PostgreSQL read only replicas
+  replicaCount: 1
+
+global:
+  postgresql:
+    auth:
+      existingSecret: postgres-credentials
+      database: postgres
+      username: postgres
+      secretKeys:
+        adminPasswordKey: postgres-password
+        userPasswordKey: password
+
+primary:
+  persistence:
+    enabled: true
+    size: 1Gi
+    # If the StorageClass with reclaimPolicy: Retain is used,
+    # install an additional StorageClass before installing PostgreSQL
+    # (the code is given below).
+    # If the default StorageClass will be used - change "gp2-retain" to "gp2"
+    storageClass: "gp2-retain"
+  extendedConfiguration: |
+    max_connections = 400
+    shared_buffers = 128MB

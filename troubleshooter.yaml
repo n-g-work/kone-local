@@ -1,0 +1,32 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: {labels: {app: troubleshooter}, name: troubleshooter}
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: troubleshooter}}
+  strategy: {rollingUpdate: {maxSurge: 25%, maxUnavailable: 25%}, type: RollingUpdate}
+  template:
+    metadata: {labels: {app: troubleshooter}}
+    spec:
+      containers:
+        - name: busybox
+          image: busybox:1.35.0
+          command: ["sh", "-c", "while true; do sleep 30; done;"]
+          imagePullPolicy: IfNotPresent
+          resources: {limits: {cpu: "50m", memory: "128Mi"}}
+        - name: curl
+          image: curlimages/curl:7.86.0
+          command: ["sh", "-c", "while true; do sleep 30; done;"]
+          imagePullPolicy: IfNotPresent
+          resources: {limits: {cpu: "50m", memory: "128Mi"}}
+        - name: dnsutils
+          command: ["sh", "-c", "while true; do sleep 30; done;"]
+          image: gcr.io/kubernetes-e2e-test-images/dnsutils:1.1
+          imagePullPolicy: IfNotPresent
+          resources: {limits: {cpu: "50m", memory: "128Mi"}}
+        - name: kubectl
+          image: bitnami/kubectl:1.28.10
+          command: ["sh", "-c", "while true; do sleep 30; done;"]
+          imagePullPolicy: IfNotPresent
+          resources: {limits: {cpu: "50m", memory: "128Mi"}}
