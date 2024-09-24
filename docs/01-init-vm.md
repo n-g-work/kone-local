@@ -10,6 +10,7 @@ username='admin'
 key_path="${HOME}/.ssh/kone.key"
 
 ssh-keygen -t rsa -b 4096 -C "${username}" -f "${key_path}" -q -N "" <<<y >/dev/null 2>&1
+mkdir -p ./ansible/ssh
 cat "${key_path}.pub" > ./ansible/ssh/public.key
 
 # clean previous guest key (optional)

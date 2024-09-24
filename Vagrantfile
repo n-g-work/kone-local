@@ -26,9 +26,9 @@ end
 boxes = [
     {
         "name" => "kone",
-        "box" => "https://cloud-images.ubuntu.com/focal/current/focal-server-cloudimg-amd64-vagrant.box",
-        "memory" => 16384,
-        "cpus" => 8,
+        "box" => "ubuntu/focal64",
+        "memory" => 4096,
+        "cpus" => 2,
         "ip" => "192.168.56.10"
     }
 ]
@@ -36,10 +36,12 @@ boxes = [
 Vagrant.configure("2") do |config|
     boxes.each do |box|
         config.ssh.insert_key = false
+        config.ssh.private_key_path = "~/.vagrant.d/default.key"
         config.vbguest.auto_update = false
 
         config.vm.define box['name'] do |curr|
             curr.vm.box = box['box']
+            curr.vm.boot_timeout = 600
 
             curr.vm.network "private_network", ip: box['ip']
             curr.vm.synced_folder ".", "/vagrant", disabled: true
